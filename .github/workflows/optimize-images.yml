@@ -52,6 +52,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p assets/processed
           git add -A -- assets/processed
           if git diff --cached --quiet; then
             echo "Generated assets are already up to date."
