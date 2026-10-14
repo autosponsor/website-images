@@ -2,3 +2,7 @@
 Thumbs.db
 *.xcf
 *.psd
+__pycache__/
+*.py[cod]
+.venv/
+venv/

@@ -1,84 +1,72 @@
 # Website Images
 
-Public image assets for website delivery through the jsDelivr CDN.
+Public image assets for website delivery through the jsDelivr CDN. **Everything committed here is public.** Do not upload confidential, customer, licensed-restricted, or otherwise private images.
 
-## Use an image in your site
+## Quick start: publish a local folder
 
-Use a **tagged release version** in production URLs so a future asset update cannot unexpectedly change a live page:
+Clone this repository on the computer that holds your images, install the tool dependency, then run the publisher. It copies supported files into `assets/incoming/<category>/`, stages them, and can commit and push them to GitHub:
 
-```html
-<img
-  src="https://cdn.jsdelivr.net/gh/autosponsor/website-images@v1.0.0/assets/content/example.webp"
-  alt="Describe the image"
-  loading="lazy"
-  decoding="async"
->
+```sh
+git clone https://github.com/autosponsor/website-images.git
+cd website-images
+python -m pip install -r requirements-image.txt
+python scripts/publish_images.py "$HOME/site-images" --category content --push
 ```
 
-For CSS:
+Use `--category brand`, `products`, `content`, or `ui`. By default the script stages files for review without committing or pushing; omit `--push` to review, then commit and push manually. It skips hidden files and symlinks, preserves source subfolders, and accepts JPG/JPEG, PNG, WebP, GIF, and SVG. Raster optimization only processes JPG/JPEG, PNG, and static WebP. Animated GIF/WebP and SVG are retained as sources and are not transcoded.
 
-```css
-background-image: url("https://cdn.jsdelivr.net/gh/autosponsor/website-images@v1.0.0/assets/ui/example.svg");
+Once the source files are pushed to `main`, GitHub Actions runs tests, generates optimized responsive WebP assets under `assets/processed/<category>/`, validates the output, removes obsolete generated WebP derivatives, and commits the generated files. Inspect the run in the repository's **Actions** tab. Wait for it to succeed before making a release tag. The workflow uses `GITHUB_TOKEN` with repository contents write permission; repository/org policy must allow Actions to write contents.
+
+### Manual alternative
+
+```sh
+mkdir -p assets/incoming/content
+cp -R "$HOME/site-images/"* assets/incoming/content/
+git add assets/incoming/content
+git commit -m "Add website images"
+git push origin main
 ```
 
-Replace `v1.0.0` with the tag you have published and `example.webp` with the committed file path. You can also browse the repository directly at GitHub. Avoid using `raw.githubusercontent.com` as your production CDN URL.
+To run the same image optimizer locally (after installing `requirements-image.txt`):
 
-## Folders
+```sh
+python scripts/optimize_images.py
+python scripts/validate_assets.py
+python -m unittest discover -s tests -v
+```
 
-- `assets/brand/` — logos, marks, and brand graphics
-- `assets/products/` — product photography and illustrations
-- `assets/content/` — editorial, blog, and campaign images
-- `assets/ui/` — icons and interface graphics
+## What the optimizer does
 
-## Publishing an update
+- Accepts static JPG/JPEG, PNG, and WebP source files up to 50 MiB each.
+- Corrects EXIF orientation, preserves alpha transparency and embedded ICC color profiles, and emits WebP at quality 82 with high-effort encoding.
+- Creates variants at 480, 960, 1440, and 1920 pixels wide only when the source is larger than that width. It also creates a fallback capped at 1920 pixels; it never upscales.
+- Mirrors the source folder structure under `assets/processed/`. For example, `assets/incoming/content/hero.jpg` produces `assets/processed/content/hero-480w.webp` etc.
+- Removes stale generated `.webp` files that no longer correspond to any supported source, but leaves unrelated files alone. Remove old source files from `assets/incoming/` yourself when you no longer want them; the next workflow run cleans up their generated derivatives.
+- Fails rather than silently flattening animations, accepting corrupt images, exceeding the 50 MiB input limit, or allowing two same-folder sources with the same basename to overwrite each other's outputs.
 
-1. Add optimized assets under the appropriate folder.
-2. Use descriptive, lowercase, hyphen-separated filenames, e.g. `summer-campaign-hero.webp`.
-3. Commit and push to `main`.
-4. Create and push a release tag (for example `v1.0.0`) for a production snapshot:
+The defaults can be tuned in `scripts/optimize_images.py`. Its command line accepts `--source`, `--output`, and ascending comma-separated `--widths` options.
 
-   ```sh
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+## Use images on your website
 
-5. Use the versioned jsDelivr URL in your site. When changing an asset, publish a new tag and update the URL rather than overwriting a version in use.
+For stable production delivery, create a new Git tag **after** the optimized derivative commit has landed. Example:
 
-## Asset guidance
+```sh
+git pull origin main
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-- Prefer **WebP** or **AVIF** for photographs; use **SVG** for simple logos and icons; use **PNG** when transparency or lossless detail is needed.
-- Resize images to the largest dimensions actually needed by the site and compress before committing. Keep files comfortably below GitHub's 100 MB per-file limit; smaller files also improve page performance.
-- Give files clear names and keep paths stable. Do not commit secrets, private/customer images, or anything that should not be publicly accessible.
-- Include meaningful `alt` text in the website markup (or empty `alt=""` for decorative images).
+Use the actual generated filenames and widths for your image. The CDN URL pattern is:
 
-## Cache behavior
+```text
+https://cdn.jsdelivr.net/gh/autosponsor/website-images@v1.0.0/assets/processed/content/hero-960w.webp
+```
 
-jsDelivr caches content. Versioned URLs are immutable in practice and are recommended for production. If you must update a file before making a new version tag, use jsDelivr's purge endpoint for that exact URL; preferably publish a new tag instead.
+Use immutable version tags in production and create a new tag when updating assets; avoid `raw.githubusercontent.com` as a production CDN URL.
 
-## Automated local-folder upload and optimization
+### Responsive HTML
 
-GitHub Actions cannot directly inspect an arbitrary folder on your computer. The safe, simple flow is to sync that folder into this repository with Git and push it; the workflow then generates responsive WebP derivatives in GitHub.
-
-1. Clone once and set your local image folder (example: `~/site-images`) as `SOURCE_DIR`:
-
-   ```sh
-   git clone https://github.com/autosponsor/website-images.git
-   cd website-images
-   mkdir -p assets/incoming/content
-   cp -R "$HOME/site-images/"* assets/incoming/content/
-   git add assets/incoming/content
-   git commit -m "Add website images"
-   git push origin main
-   ```
-
-2. The **Optimize uploaded images** workflow runs on the push and writes WebP variants to `assets/processed/content/`. Check its run under the repository's **Actions** tab. The workflow needs the repository's default `GITHUB_TOKEN` to have read/write contents permission; the workflow declares that permission explicitly.
-3. Publish a new Git tag after the generated files are committed, then use that tag in production CDN URLs as shown below. Do not use an old tag for newly added files.
-
-The workflow accepts JPG/JPEG, PNG, and WebP input and generates 480, 960, 1440, and 1920-pixel variants when smaller than the source, plus a full-size (capped at 1920 px wide) fallback. It does not upscale. Keep originals in `assets/incoming/` so you can regenerate derivatives later. For GIF animation and SVG, retain and serve the original instead of converting them through this raster pipeline.
-
-### Responsive HTML example
-
-Replace `v1.0.0` with the release tag that includes these files; use the actual generated filenames and widths for your image. The `sizes` value should reflect the rendered layout in your site.
+Set `sizes` to the rendered width in your page, and set `width`/`height` to the real aspect ratio to reserve layout space:
 
 ```html
 <img
@@ -89,21 +77,20 @@ Replace `v1.0.0` with the release tag that includes these files; use the actual 
   sizes="(max-width: 600px) 100vw, (max-width: 1200px) 80vw, 1200px"
   width="1920"
   height="1080"
-  alt="Describe what the hero image communicates"
+  alt="Describe what the image communicates"
   fetchpriority="high"
   decoding="async"
 >
 ```
 
-For below-the-fold images, use `loading="lazy"` instead of `fetchpriority="high"`. Do not lazy-load the main above-the-fold/LCP image.
+Use `loading="lazy"` for below-the-fold images, not the main above-the-fold/LCP image. If the source is narrower than a listed `srcset` width, omit that unavailable candidate. For decorative backgrounds, use CSS and media queries instead; HTML `srcset` is generally preferable for content images.
 
-### Responsive CSS background example
+### CSS background
 
 ```css
 .hero {
-  background-image: url("https://cdn.jsdelivr.net/gh/autosponsor/website-images@v1.0.0/assets/processed/content/hero.webp");
-  background-size: cover;
-  background-position: center;
+  background: center / cover no-repeat
+    url("https://cdn.jsdelivr.net/gh/autosponsor/website-images@v1.0.0/assets/processed/content/hero.webp");
 }
 
 @media (max-width: 600px) {
@@ -113,4 +100,20 @@ For below-the-fold images, use `loading="lazy"` instead of `fetchpriority="high"
 }
 ```
 
-HTML `srcset` is generally preferable for content images because the browser chooses a suitable resource based on viewport and pixel density. CSS media queries are suitable for decorative backgrounds.
+## Image preparation and maintenance
+
+- Resize to the largest size the design needs; do not upload oversized originals when a smaller source will do.
+- Prefer WebP/AVIF for photos, SVG for suitable vector graphics, and PNG where transparency or lossless detail matters. This pipeline emits WebP; keep animated images and SVG as originals.
+- Use clear lowercase hyphenated filenames. Add useful alt text in page markup; use `alt=""` for decorative images.
+- Avoid committing editing sources such as PSD/XCF files. GitHub blocks files over 100 MB; this pipeline has a stricter 50 MiB source cap.
+- Keep originals in `assets/incoming/` if you may need to regenerate the processed versions. Output validation enforces WebP format and a 20 MiB generated-file cap.
+- Versioned URLs are recommended for production because CDN caches can retain content. If an unversioned asset must be refreshed, purge the exact jsDelivr URL or publish a new version tag.
+
+## Repository layout
+
+- `assets/incoming/` — original image sources supplied by the local publisher
+- `assets/processed/` — generated, responsive WebP files
+- `assets/brand/`, `products/`, `content/`, `ui/` — categories and direct/manual assets
+- `scripts/` — local publisher, optimizer, and output validator
+- `tests/` — optimizer regression tests
+- `.github/workflows/` — GitHub Actions automation

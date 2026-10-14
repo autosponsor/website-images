@@ -1,11 +1,13 @@
-name: Optimize uploaded images
+name: Optimize and validate images
 
 on:
   push:
     branches: [main]
     paths:
       - 'assets/incoming/**'
-      - 'scripts/optimize_images.py'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'requirements-image.txt'
       - '.github/workflows/optimize-images.yml'
   workflow_dispatch:
 
@@ -19,25 +21,41 @@ concurrency:
 jobs:
   optimize:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Check out repository
+      - name: Check out main
         uses: actions/checkout@v4
         with:
           ref: main
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-image.txt
 
-      - name: Install image optimizer
-        run: python -m pip install --disable-pip-version-check Pillow
+      - name: Install image tooling
+        run: python -m pip install -r requirements-image.txt
 
-      - name: Generate responsive WebP variants
+      - name: Run optimizer tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Generate responsive WebP assets and remove stale variants
         run: python scripts/optimize_images.py
 
-      - name: Commit generated variants
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: 'Optimize and publish responsive WebP images [skip ci]'
-          file_pattern: 'assets/processed/**'
+      - name: Validate generated assets
+        run: python scripts/validate_assets.py
+
+      - name: Commit changed generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- assets/processed
+          if git diff --cached --quiet; then
+            echo "Generated assets are already up to date."
+          else
+            git commit -m "Optimize and publish responsive image variants"
+            git push origin HEAD:main
+          fi
