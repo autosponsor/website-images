@@ -1,0 +1,43 @@
+name: Optimize uploaded images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/incoming/**'
+      - 'scripts/optimize_images.py'
+      - '.github/workflows/optimize-images.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: optimize-images-main
+  cancel-in-progress: false
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install image optimizer
+        run: python -m pip install --disable-pip-version-check Pillow
+
+      - name: Generate responsive WebP variants
+        run: python scripts/optimize_images.py
+
+      - name: Commit generated variants
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Optimize and publish responsive WebP images [skip ci]'
+          file_pattern: 'assets/processed/**'

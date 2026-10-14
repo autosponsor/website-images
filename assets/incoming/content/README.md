@@ -1,0 +1,1 @@
+Put source raster images here (JPG, JPEG, PNG, or WebP), then commit and push to `main`. GitHub Actions creates responsive WebP variants under the matching path in `assets/processed/`. See the root README for setup and usage.
